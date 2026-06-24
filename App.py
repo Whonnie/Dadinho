@@ -333,7 +333,6 @@ def renderizar_tabuleiro_sincronizado():
                     <h1 style='color: #fbbf24; font-size: 40px;'>Fim da Rodada!</h1>
                     <h2 style='color: white; font-size: 28px; margin-top:20px;'>Próxima jogada:</h2>
                     <h1 style='color: #10b981; font-size: 48px; font-weight: bold;'>JOGADA DE {estado_nuvem['turno_atual'].upper()} 🎲</h1>
-                    <p style='color: rgba(255,255,255,0.6); font-style:italic; margin-top:10px;'>Clique abaixo para assumir a mesa</p>
                 </div>
             """, unsafe_allow_html=True)
             if st.button("✨ COMEÇAR MINHA JOGADA", use_container_width=True, type="primary", key="btn_começar_jogada_trans"):
