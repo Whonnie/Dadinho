@@ -35,6 +35,8 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: inset 0px 2px 5px rgba(0,0,0,0.8);
     }
+    
+    /* Caixa de pontuação salva fixa */
     .caixa-pontos-salva {
         background-color: #1e293b !important;
         color: #f8fafc !important;
@@ -46,6 +48,7 @@ st.markdown("""
         border-radius: 8px;
         box-shadow: inset 0px 2px 4px rgba(0,0,0,0.4);
     }
+    
     .divisor-pontos {
         border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
         margin: 8px 0;
@@ -239,8 +242,10 @@ def reiniciar_partida_completa():
         "mostrar_tela_transicao": False
     })
     
-    # INJEÇÃO DA FORÇA DE RESET: Obriga as telas do PC e Tablet a recarregarem limpas
-    st.html("<script>parent.window.location.reload()</script>")
+    # BLINDAGEM DO RESET: Limpa caches e força a página principal das duas telas a dar F5
+    st.session_state.clear()
+    st.markdown("<script>parent.window.location.reload();</script>", unsafe_allow_html=True)
+    st.stop()
 
 def selecionar_slot_pontuacao(slot_chave, estado):
     previa = calcular_pontos_possiveis(estado["dados"], estado["jogada_de_primeira"])
@@ -281,7 +286,9 @@ def selecionar_slot_pontuacao(slot_chave, estado):
         "por_debajo_ativo": False,
         "mostrar_tela_transicao": True
     })
-    st.rerun()
+    
+    # Correção do fluxo do turno: avisa o fragmento para reler sem travar o script principal
+    st.html("<script>parent.window.location.reload()</script>")
 
 def fechar_tela_transicao():
     salvar_estado_no_banco({"mostrar_tela_transicao": False})
@@ -326,6 +333,7 @@ def renderizar_tabuleiro_sincronizado():
                     <h1 style='color: #fbbf24; font-size: 40px;'>Fim da Rodada!</h1>
                     <h2 style='color: white; font-size: 28px; margin-top:20px;'>Próxima jogada:</h2>
                     <h1 style='color: #10b981; font-size: 48px; font-weight: bold;'>JOGADA DE {estado_nuvem['turno_atual'].upper()} 🎲</h1>
+                    <p style='color: rgba(255,255,255,0.6); font-style:italic; margin-top:10px;'>Clique abaixo para assumir a mesa</p>
                 </div>
             """, unsafe_allow_html=True)
             if st.button("✨ COMEÇAR MINHA JOGADA", use_container_width=True, type="primary", key="btn_começar_jogada_trans"):
@@ -499,9 +507,9 @@ def renderizar_tabuleiro_sincronizado():
                             pontos_previa = previa_pontos.get(chave, 0)
                             if st.button(f"Anotar ({pontos_previa})", key=f"slot_{chave}", use_container_width=True):
                                 selecionar_slot_pontuacao(chave, estado_nuvem)
-                                st.rerun()
                         else:
-                            st.markdown("<div class='caixa-pontos-salva' style='background-color: transparent; border: 1px dashed rgba(255,255,255,0.2); color: rgba(255,255,255,0.4);'>-</div>", unsafe_allow_html=True)
+                            # REMOVIDO O RETÂNGULO ESCURO VAZIO DO ELSE: Exibe apenas o traço centralizado e limpo
+                            st.markdown("<div style='color: rgba(255,255,255,0.4); text-align: center; font-size: 18px; font-weight: bold; padding: 6px 0;'>-</div>", unsafe_allow_html=True)
                 st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
                             
             st.markdown("<br>", unsafe_allow_html=True)
