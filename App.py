@@ -23,14 +23,13 @@ st.markdown("""
         box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
     }
     
-    /* Retângulo escuro premium no topo do placar para o Total */
     .caixa-total-topo {
         background-color: #011612 !important;
         border: 2px solid #fbbf24 !important;
         border-radius: 10px;
-        padding: 10px;
+        padding: 12px;
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 25px;
         box-shadow: inset 0px 2px 5px rgba(0,0,0,0.8);
     }
     
@@ -68,7 +67,6 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* Janela de Transição Centralizada de Turno */
     .tela-transicao {
         background-color: #022c22;
         border: 4px solid #fbbf24;
@@ -76,7 +74,7 @@ st.markdown("""
         padding: 40px;
         text-align: center;
         box-shadow: 0px 10px 30px rgba(0,0,0,0.7);
-        margin: 10% auto;
+        margin: 8px auto;
         max-width: 600px;
     }
     </style>
@@ -113,14 +111,13 @@ def salvar_estado_no_banco(dados_atualizados):
 # MATEMÁTICA E REGRAS DOS DADINHOS
 # -------------------------------------------------------------------------
 def obter_valores_finais_dados(dados_mesa):
-    # Proteção: Ignora dados vazios (valor None ou 0) para não quebrar os cálculos
-    valores_normais = [d["valor"] for d in dados_mesa if d.get("valor")]
+    valores_normais = [d["valor"] for d in dados_mesa if d.get("valor") is not None]
     if not valores_normais:
         return []
         
     valores_naturais = []
     for d in dados_mesa:
-        if d.get("valor"):
+        if d.get("valor") is not None:
             if d.get("veio_por_debajo") and not d["salvo"]:
                 valores_naturais.append(7 - d["valor"])
             else:
@@ -132,7 +129,7 @@ def obter_valores_finais_dados(dados_mesa):
 
 def verificar_combinacoes_mesa(dados_mesa):
     valores_finais = obter_valores_finais_dados(dados_mesa)
-    if not valores_finais:
+    if not valores_finais or len(valores_finais) < 5:
         return {"escaleira": False, "full_house": False, "quadra": False, "tuti": False}
         
     contagem = Counter(valores_finais)
@@ -142,7 +139,7 @@ def verificar_combinacoes_mesa(dados_mesa):
         "escaleira": (valores_unicos == [1, 2, 3, 4, 5] or valores_unicos == [2, 3, 4, 5, 6] or valores_unicos == [1, 3, 4, 5, 6]),
         "full_house": (sorted(list(contagem.values())) == [2, 3]),
         "quadra": any(qtd >= 4 for qtd in contagem.values()),
-        "tuti": (len(valores_finais) == 5 and len(set(valores_finais)) == 1)
+        "tuti": (len(set(valores_finais)) == 1)
     }
 
 def calcular_pontos_possiveis(dados_mesa, jogada_de_primeira):
@@ -150,7 +147,7 @@ def calcular_pontos_possiveis(dados_mesa, jogada_de_primeira):
     opcoes = {i: 0 for i in range(1, 7)}
     opcoes.update({"escaleira": 0, "full_house": 0, "quadra": 0, "tuti": 0})
     
-    if not valores:
+    if not valores or len(valores) < 5:
         return opcoes
         
     contagem = Counter(valores)
@@ -185,7 +182,6 @@ def rolar_dados_web(estado):
             jogada_primeira = False
 
         dados_novos = estado["dados"]
-        
         st.session_state["animar_rolagem_normal"] = True
         if estado["por_debajo_ativo"]:
             st.session_state["animar_por_debajo"] = True
@@ -212,7 +208,7 @@ def rolar_dados_web(estado):
             })
 
 def reiniciar_partida_completa():
-    # Inicializa os dados vazios (valor = None) para não mostrar números antes da primeira jogada
+    # Inicialização pura dos dados sem nenhum número exibido
     dados_iniciais = [
         {"valor": None, "salvo": False, "veio_por_debajo": False, "cor": "#F8F23B", "texto": "#000000"},
         {"valor": None, "salvo": False, "veio_por_debajo": False, "cor": "#F8F23B", "texto": "#000000"},
@@ -228,8 +224,12 @@ def reiniciar_partida_completa():
         "Clara": {"escaleira": 0, "full_house": 0, "quadra": 0, "tuti": 0},
         "Júlia": {"escaleira": 0, "full_house": 0, "quadra": 0, "tuti": 0}
     }
+    
+    # DEFINE ALEATORIAMENTE QUEM COMEÇA A PARTIDA
+    jogador_inicial = random.choice(["Clara", "Júlia"])
+    
     salvar_estado_no_banco({
-        "turno_atual": "Clara",
+        "turno_atual": jogador_inicial,
         "lancamentos_restantes": 3,
         "por_debajo_ativo": False,
         "jogada_de_primeira": True,
@@ -263,7 +263,7 @@ def selecionar_slot_pontuacao(slot_chave, estado):
     pontuacao[jogador][str_chave] = pontos_a_guardar
     proximo_jogador = "Júlia" if jogador == "Clara" else "Clara"
 
-    # Zera os números dos dados para a próxima rodada começar limpa
+    # Reseta os dados limpando os números para a vez do próximo
     dados_limpos = estado["dados"]
     for d in dados_limpos:
         d["valor"] = None
@@ -279,7 +279,7 @@ def selecionar_slot_pontuacao(slot_chave, estado):
         "dados_rolados_nesta_rodada": False,
         "dados": dados_limpos,
         "por_debajo_ativo": False,
-        "mostrar_tela_transicao": True  # Ativa o sinalizador da tela de transição
+        "mostrar_tela_transicao": True
     })
     st.rerun()
 
@@ -295,21 +295,22 @@ def renderizar_tabuleiro_sincronizado():
     estado_nuvem = baixar_estado_do_jogo()
     
     if estado_nuvem:
-        # LÓGICA 1: VERIFICAÇÃO DE FINAL DE JOGO (Todos os slots preenchidos)
+        # LÓGICA DE FIM DE PARTIDA (Coroação)
         fim_clara = all(v is not None for v in estado_nuvem["pontuacao"]["Clara"].values())
         fim_julia = all(v is not None for v in estado_nuvem["pontuacao"]["Júlia"].values())
         
         if fim_clara and fim_julia:
-            # Calcula os totais definitivos para a coroação
             tot_clara = sum(v for v in estado_nuvem["pontuacao"]["Clara"].values() if v is not None) + sum(q * 5 for q in estado_nuvem["bonus_repeticao"]["Clara"].values())
             tot_julia = sum(v for v in estado_nuvem["pontuacao"]["Júlia"].values() if v is not None) + sum(q * 5 for q in estado_nuvem["bonus_repeticao"]["Júlia"].values())
             
-            vencedora = "Clara" if tot_clara > tot_julia else ("Júlia" if tot_julia > tot_clara else "Empate")
+            if tot_clara > tot_julia: vencedora = "Clara"
+            elif tot_julia > tot_clara: vencedora = "Júlia"
+            else: vencedora = "Empate"
             
             st.markdown(f"""
                 <div class='tela-transicao'>
                     <h1 style='color: #fbbf24; font-size: 50px;'>🏆 FIM DE PARTIDA! 🏆</h1>
-                    <p style='color: white; font-size: 24px; margin-top:20px;'>Clara: <b>{tot_clara} pts</b> | Júlia: <b>{tot_julia} pts</b></p>
+                    <p style='color: white; font-size: 26px; margin-top:20px;'>Clara: <b>{tot_clara} pts</b> | Júlia: <b>{tot_julia} pts</b></p>
                     <h2 style='color: #10b981; font-size: 38px; margin-top:15px;'>🎉 Parabéns, {vencedora.upper()}! Você ganhou! 🎉</h2>
                     <br>
                 </div>
@@ -318,14 +319,14 @@ def renderizar_tabuleiro_sincronizado():
                 reiniciar_partida_completa()
             return
 
-        # LÓGICA 2: TELA DE TRANSIÇÃO DE JOGADOR
+        # LÓGICA DE TELA DE TRANSIÇÃO DE JOGADOR
         if estado_nuvem.get("mostrar_tela_transicao"):
             st.markdown(f"""
                 <div class='tela-transicao'>
                     <h1 style='color: #fbbf24; font-size: 40px;'>Fim da Rodada!</h1>
-                    <h2 style='color: white; font-size: 30px; margin-top:20px;'>Próxima jogada:</h2>
-                    <h1 style='color: #10b981; font-size: 48px; font-weight: bold;'>{estado_nuvem['turno_atual'].upper()} 🎲</h1>
-                    <p style='color: rgba(255,255,255,0.6); font-style:italic;'>Clique abaixo para assumir a mesa</p>
+                    <h2 style='color: white; font-size: 28px; margin-top:20px;'>Próxima jogada:</h2>
+                    <h1 style='color: #10b981; font-size: 52px; font-weight: bold;'>JOGADA DE {estado_nuvem['turno_atual'].upper()} 🎲</h1>
+                    <p style='color: rgba(255,255,255,0.6); font-style:italic; margin-top:10px;'>Clique abaixo para assumir a mesa</p>
                 </div>
             """, unsafe_allow_html=True)
             if st.button("✨ COMEÇAR MINHA JOGADA", use_container_width=True, type="primary"):
@@ -401,7 +402,7 @@ def renderizar_tabuleiro_sincronizado():
                 salvar_estado_no_banco({"dados": dados_finais_debajo, "por_debajo_ativo": False})
                 st.rerun()
 
-            # Renderização dos dados fixos da rodada (mostra "-" se for None)
+            # Renderização limpa padrão (Dados vazios mostram "-")
             with container_dados.container():
                 cols_dados = st.columns(5)
                 for i in range(5):
@@ -430,7 +431,6 @@ def renderizar_tabuleiro_sincronizado():
 
             st.markdown("<br><br>", unsafe_allow_html=True)
             
-            # PAINEL DE CONTROLES ESQUERDO COMPLETO (Incluindo os resets movidos para cá)
             col_debajo, col_action = st.columns(2)
             with col_debajo:
                 cor_botao_debajo = "🔥 POR DEBAJO: ON" if estado_nuvem["por_debajo_ativo"] else "💤 POR DEBAJO: OFF"
@@ -445,15 +445,13 @@ def renderizar_tabuleiro_sincronizado():
                     
             st.markdown("<br><hr style='border-color: rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
             
-            # Botão de zerar reposicionado abaixo da Rolagem conforme solicitado!
             if st.button("🔄 ZERAR PARTIDA ATUAL", use_container_width=True):
                 reiniciar_partida_completa()
 
         with Placar:
             st.markdown("<div class='tabela-pontos'>", unsafe_allow_html=True)
-            st.markdown("<h2 class='titulo-dourado' style='margin-bottom:5px;'>TABELA DE PONTOS</h2>", unsafe_allow_html=True)
             
-            # CÁLCULO DOS TOTAIS DA EXIBIÇÃO DO TOPO
+            # CÁLCULO DINÂMICO DOS TOTAIS
             jogador = estado_nuvem["turno_atual"]
             subtotal = sum(v for v in estado_nuvem["pontuacao"][jogador].values() if v is not None)
             total_bonus_salvo = sum(qtd * 5 for qtd in estado_nuvem["bonus_repeticao"][jogador].values())
@@ -467,7 +465,7 @@ def renderizar_tabuleiro_sincronizado():
                         
             total_geral = subtotal + total_bonus_salvo + bonus_pendente
             
-            # RENDERIZAÇÃO DO TOTAL DENTRO DO RETÂNGULO PRETO DO TOPO APONTADO!
+            # TOTAL INTEGRADO EXCLUSIVAMENTE NO TOPO DA CAIXA ESCURA
             st.markdown(f"""
                 <div class='caixa-total-topo'>
                     <span style='color: #fbbf24; font-size: 22px; font-weight: bold; font-family: sans-serif;'>
@@ -475,6 +473,8 @@ def renderizar_tabuleiro_sincronizado():
                     </span>
                 </div>
             """, unsafe_allow_html=True)
+            
+            st.markdown("<h2 class='titulo-dourado' style='margin-bottom:15px;'>TABELA DE PONTOS</h2>", unsafe_allow_html=True)
             
             slots_nomes = {
                 1: "Jogada de 1", 2: "Jogada de 2", 3: "Jogada de 3",
@@ -503,6 +503,7 @@ def renderizar_tabuleiro_sincronizado():
                                 st.rerun()
                         else:
                             st.markdown("<div class='caixa-pontos-salva' style='background-color: transparent; border: 1px dashed rgba(255,255,255,0.2); color: rgba(255,255,255,0.4);'>-</div>", unsafe_allow_html=True)
+                st.markdown("<div class='caixa-total-topo' style='display:none;'></div>", unsafe_allow_html=True) # Segurança anti-leak
                 st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
                             
             st.markdown("<br>", unsafe_allow_html=True)
@@ -512,5 +513,5 @@ def renderizar_tabuleiro_sincronizado():
                 st.markdown(f"<p style='color: #fbbf24; font-size:15px; font-style: italic; text-align:center; margin:0;'>🎁 Bônus Extras: {total_bonus_salvo} pts</p>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-# Inicializa o tabuleiro sincronizado
+# Inicializa o loop sincronizado definitivo
 renderizar_tabuleiro_sincronizado()
