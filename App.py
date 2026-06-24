@@ -79,6 +79,7 @@ supabase = iniciar_conexao_banco()
 
 def baixar_estado_do_jogo():
     try:
+        # Força o descarte de caches antigos na requisição para ler dados frescos
         resposta = supabase.from_("partida").select("*").eq("id", 1).execute()
         if resposta.data:
             return resposta.data[0]
@@ -91,9 +92,6 @@ def salvar_estado_no_banco(dados_atualizados):
         supabase.from_("partida").update(dados_atualizados).eq("id", 1).execute()
     except Exception as e:
         st.error(f"Erro ao salvar jogada: {e}")
-
-# Carrega o estado atualizado em tempo real
-estado_nuvem = baixar_estado_do_jogo()
 
 # -------------------------------------------------------------------------
 # MATEMÁTICA E REGRAS DOS DADINHOS
@@ -137,7 +135,7 @@ def calcular_pontos_possiveis(dados_mesa, jogada_de_primeira):
     opcoes["quadra"] = (45 if jogada_de_primeira else 40) if mesa["quadra"] else 0
     opcoes["tuti"] = (100 if jogada_de_primeira else 50) if mesa["tuti"] else 0
 
-    return opcoes
+    return options if 'options' in locals() else opcoes
 
 # -------------------------------------------------------------------------
 # INTERAÇÃO DAS JOGADAS (Ações Gravadas na Nuvem)
@@ -160,7 +158,6 @@ def rolar_dados_web(estado):
 
         dados_novos = estado["dados"]
         
-        # Ativa o sinalizador local de que os dados estão rolando AGORA nesta máquina
         st.session_state["animar_rolagem_normal"] = True
         if estado["por_debajo_ativo"]:
             st.session_state["animar_por_debajo"] = True
@@ -170,7 +167,6 @@ def rolar_dados_web(estado):
                 dados_novos[i]["valor"] = random.randint(1, 6)
                 dados_novos[i]["veio_por_debajo"] = False
 
-        # Se Por Debajo não estiver ativo, salva o resultado normal direto
         if not estado["por_debajo_ativo"]:
             salvar_estado_no_banco({
                 "dados": dados_novos,
@@ -180,7 +176,6 @@ def rolar_dados_web(estado):
                 "por_debajo_ativo": False
             })
         else:
-            # Se tiver Por Debajo, salva o frame intermediário
             salvar_estado_no_banco({
                 "dados": dados_novos,
                 "lancamentos_restantes": lancamentos - 1,
@@ -255,30 +250,94 @@ def selecionar_slot_pontuacao(slot_chave, estado):
     })
 
 # -------------------------------------------------------------------------
-# INTERINTERFACE VISUAL (MONTAGEM DO SITE DEFINITIVO)
+# FRAGMENTO DE AUTO-ATUALIZAÇÃO SIMULTÂNEA (Roda a cada 3 segundos)
 # -------------------------------------------------------------------------
-if estado_nuvem:
-    col_turn, col_lanc = st.columns([2, 1])
-    with col_turn:
-        st.markdown(f"<h1 style='color: #10b981; font-family: sans-serif; margin-bottom:0;'>🎲 TURNO ATUAL: {estado_nuvem['turno_atual'].upper()}</h1>", unsafe_allow_html=True)
-    with col_lanc:
-        st.markdown(f"<h2 style='color: #fbbf24; text-align: right; margin-bottom:0; font-family: sans-serif;'>Lançamentos: {estado_nuvem['lancamentos_restantes']}/3</h2>", unsafe_allow_html=True)
+@st.fragment(run_every=3)
+def renderizar_tabuleiro_sincronizado():
+    # Baixa o estado mais recente direto da nuvem a cada ciclo de 3s
+    estado_nuvem = baixar_estado_do_jogo()
+    
+    if estado_nuvem:
+        col_turn, col_lanc = st.columns([2, 1])
+        with col_turn:
+            st.markdown(f"<h1 style='color: #10b981; font-family: sans-serif; margin-bottom:0;'>🎲 TURNO ATUAL: {estado_nuvem['turno_atual'].upper()}</h1>", unsafe_allow_html=True)
+        with col_lanc:
+            st.markdown(f"<h2 style='color: #fbbf24; text-align: right; margin-bottom:0; font-family: sans-serif;'>Lançamentos: {estado_nuvem['lancamentos_restantes']}/3</h2>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='margin-top: 10px; margin-bottom: 20px; border-color: #10b981;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin-top: 10px; margin-bottom: 20px; border-color: #10b981;'>", unsafe_allow_html=True)
 
-    Mesa, Espacador, Placar = st.columns([5, 0.6, 3.5])
+        Mesa, Espacador, Placar = st.columns([5, 0.6, 3.5])
 
-    with Mesa:
-        st.markdown("<h2 class='titulo-dourado' style='text-align: left;'>Mesa de Dados</h2>", unsafe_allow_html=True)
-        
-        container_dados = st.empty()
-        
-        # 1. FUNÇÃO DE ANIMAÇÃO LIMPA (Sem injetar st.button no loop para não dar conflito de chaves)
-        def animar_grid_dados(dados_para_mostrar):
+        with Mesa:
+            st.markdown("<h2 class='titulo-dourado' style='text-align: left;'>Mesa de Dados</h2>", unsafe_allow_html=True)
+            
+            container_dados = st.empty()
+            
+            def animar_grid_dados(dados_para_mostrar):
+                with container_dados.container():
+                    cols_dados = st.columns(5)
+                    for i in range(5):
+                        d = dados_para_mostrar[i]
+                        borda = "5px solid #fbbf24" if d["salvo"] else "2px solid rgba(255,255,255,0.2)"
+                        with cols_dados[i]:
+                            st.markdown(f"""
+                                <div style="
+                                    background-color: {d['cor']}; 
+                                    color: {d['texto']}; 
+                                    font-size: 54px; 
+                                    font-weight: 900; 
+                                    text-align: center; 
+                                    padding: 15px 0px; 
+                                    border-radius: 18px; 
+                                    border: {borda};
+                                    box-shadow: 4px 4px 12px rgba(0,0,0,0.6);
+                                    font-family: 'Arial Black', sans-serif;
+                                ">{d['valor']}</div>
+                            """, unsafe_allow_html=True)
+
+            # Execução de animações locais caso disparadas pelo usuário desta máquina
+            if st.session_state.get("animar_rolagem_normal"):
+                del st.session_state["animar_rolagem_normal"]
+                for _ in range(6):
+                    dados_ficticios = []
+                    for d in estado_nuvem["dados"]:
+                        if d["salvo"]:
+                            dados_ficticios.append(d)
+                        else:
+                            dados_ficticios.append({"valor": random.randint(1, 6), "cor": d["cor"], "texto": d["texto"], "salvo": False})
+                    animar_grid_dados(dados_ficticios)
+                    time.sleep(0.08)
+
+            if st.session_state.get("animar_por_debajo"):
+                del st.session_state["animar_por_debajo"]
+                animar_grid_dados(estado_nuvem["dados"])
+                time.sleep(0.6)
+                
+                dados_finais_debajo = estado_nuvem["dados"]
+                for _ in range(4):
+                    dados_giro = []
+                    for d in dados_finais_debajo:
+                        if d["salvo"]: dados_giro.append(d)
+                        else: dados_giro.append({"valor": random.randint(1,6), "cor": d["cor"], "texto": d["texto"], "salvo": False})
+                    animar_grid_dados(dados_giro)
+                    time.sleep(0.07)
+                    
+                for i in range(5):
+                    if not dados_finais_debajo[i]["salvo"]:
+                        dados_finais_debajo[i]["valor"] = 7 - dados_finais_debajo[i]["valor"]
+                        dados_finais_debajo[i]["veio_por_debajo"] = True
+                        
+                salvar_estado_no_banco({
+                    "dados": dados_finais_debajo,
+                    "por_debajo_ativo": False
+                })
+                st.rerun()
+
+            # Renderização estável iterável de jogabilidade
             with container_dados.container():
                 cols_dados = st.columns(5)
                 for i in range(5):
-                    d = dados_para_mostrar[i]
+                    d = estado_nuvem["dados"][i]
                     borda = "5px solid #fbbf24" if d["salvo"] else "2px solid rgba(255,255,255,0.2)"
                     with cols_dados[i]:
                         st.markdown(f"""
@@ -295,142 +354,83 @@ if estado_nuvem:
                                 font-family: 'Arial Black', sans-serif;
                             ">{d['valor']}</div>
                         """, unsafe_allow_html=True)
-
-        # 2. EXECUÇÃO DO EFEITO DA ANIMAÇÃO ROLANDO OS DADOS
-        if st.session_state.get("animar_rolagem_normal"):
-            del st.session_state["animar_rolagem_normal"]
-            for _ in range(6):
-                dados_ficticios = []
-                for d in estado_nuvem["dados"]:
-                    if d["salvo"]:
-                        dados_ficticios.append(d)
-                    else:
-                        dados_ficticios.append({"valor": random.randint(1, 6), "cor": d["cor"], "texto": d["texto"], "salvo": False})
-                animar_grid_dados(dados_ficticios)
-                time.sleep(0.08)
-
-        # 3. EXECUÇÃO DO SUSPENSE E DA ANIMAÇÃO DO POR DEBAJO
-        if st.session_state.get("animar_por_debajo"):
-            del st.session_state["animar_por_debajo"]
-            
-            animar_grid_dados(estado_nuvem["dados"])
-            time.sleep(0.6) # Pausa dramática para ver o valor original antes de virar
-            
-            dados_finais_debajo = estado_nuvem["dados"]
-            for _ in range(4):
-                dados_giro = []
-                for d in dados_finais_debajo:
-                    if d["salvo"]: dados_giro.append(d)
-                    else: dados_giro.append({"valor": random.randint(1,6), "cor": d["cor"], "texto": d["texto"], "salvo": False})
-                animar_grid_dados(dados_giro)
-                time.sleep(0.07)
-                
-            for i in range(5):
-                if not dados_finais_debajo[i]["salvo"]:
-                    dados_finais_debajo[i]["valor"] = 7 - dados_finais_debajo[i]["valor"]
-                    dados_finais_debajo[i]["veio_por_debajo"] = True
-                    
-            salvar_estado_no_banco({
-                "dados": dados_finais_debajo,
-                "por_debajo_ativo": False
-            })
-            st.rerun()
-
-        # 4. RENDERIZAÇÃO ESTÁVEL DE JOGABILIDADE (Desenhado uma única vez com botões clicáveis seguros)
-        with container_dados.container():
-            cols_dados = st.columns(5)
-            for i in range(5):
-                d = estado_nuvem["dados"][i]
-                borda = "5px solid #fbbf24" if d["salvo"] else "2px solid rgba(255,255,255,0.2)"
-                with cols_dados[i]:
-                    st.markdown(f"""
-                        <div style="
-                            background-color: {d['cor']}; 
-                            color: {d['texto']}; 
-                            font-size: 54px; 
-                            font-weight: 900; 
-                            text-align: center; 
-                            padding: 15px 0px; 
-                            border-radius: 18px; 
-                            border: {borda};
-                            box-shadow: 4px 4px 12px rgba(0,0,0,0.6);
-                            font-family: 'Arial Black', sans-serif;
-                        ">{d['valor']}</div>
-                    """, unsafe_allow_html=True)
-                    
-                    txt_travar = "🔓 Salvo" if d["salvo"] else "🔒 Travar"
-                    if st.button(txt_travar, key=f"btn_dado_real_{i}", use_container_width=True):
-                        alternar_salvamento_dado(i, estado_nuvem)
-                        st.rerun()
-
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        
-        col_debajo, col_action = st.columns(2)
-        with col_debajo:
-            cor_botao_debajo = "🔥 POR DEBAJO: ON" if estado_nuvem["por_debajo_ativo"] else "💤 POR DEBAJO: OFF"
-            if st.button(cor_botao_debajo, use_container_width=True):
-                alternar_por_debajo(estado_nuvem)
-                st.rerun()
-                
-        with col_action:
-            if st.button("🎲 ROLAR DADOS", type="primary", use_container_width=True):
-                rolar_dados_web(estado_nuvem)
-                st.rerun()
-
-    with Placar:
-        st.markdown("<div class='tabela-pontos'>", unsafe_allow_html=True)
-        st.markdown("<h2 class='titulo-dourado'>TABELA DE PONTOS</h2>", unsafe_allow_html=True)
-        
-        slots_nomes = {
-            1: "Jogada de 1", 2: "Jogada de 2", 3: "Jogada de 3",
-            4: "Jogada de 4", 5: "Jogada de 5", 6: "Jogada de 6",
-            "escaleira": "Escaleira (20 pts)", "full_house": "Full House (30 pts)",
-            "quadra": "Quadra (40 pts)", "tuti": "Tuti (50 pts)"
-        }
-        
-        jogador = estado_nuvem["turno_atual"]
-        previa_pontos = calcular_pontos_possiveis(estado_nuvem["dados"], estado_nuvem["jogada_de_primeira"]) if estado_nuvem["dados_rolados_nesta_rodada"] else {}
-        
-        for chave, nome in slots_nomes.items():
-            c_nome, c_btn = st.columns([1.8, 1])
-            with c_nome:
-                st.markdown(f"<div class='linha-placar'>{nome}</div>", unsafe_allow_html=True)
-            with c_btn:
-                str_chave = str(chave)
-                valor_salvo = estado_nuvem["pontuacao"][jogador].get(str_chave)
-                
-                if valor_salvo is not None:
-                    st.markdown(f"<div class='caixa-pontos-salva'>{valor_salvo} pts</div>", unsafe_allow_html=True)
-                else:
-                    if estado_nuvem["dados_rolados_nesta_rodada"]:
-                        pontos_previa = previa_pontos.get(chave, 0)
-                        if st.button(f"Anotar ({pontos_previa})", key=f"slot_{chave}", use_container_width=True):
-                            selecionar_slot_pontuacao(chave, estado_nuvem)
-                            st.rerun()
-                    else:
-                        st.markdown("<div class='caixa-pontos-salva' style='background-color: transparent; border: 1px dashed rgba(255,255,255,0.2); color: rgba(255,255,255,0.4);'>-</div>", unsafe_allow_html=True)
-            st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
                         
-        st.markdown("<br>", unsafe_allow_html=True)
-        total_bonus_salvo = sum(qtd * 5 for qtd in estado_nuvem["bonus_repeticao"][jogador].values())
-        bonus_pendente = 0
-        if estado_nuvem["dados_rolados_nesta_rodada"]:
-            mesa = verificar_combinacoes_mesa(estado_nuvem["dados"])
-            for b_chave in ["escaleira", "full_house", "quadra", "tuti"]:
-                if mesa[b_chave] and estado_nuvem["pontuacao"][jogador].get(b_chave) is not None:
-                    bonus_pendente += 5
+                        txt_travar = "🔓 Salvo" if d["salvo"] else "🔒 Travar"
+                        if st.button(txt_travar, key=f"btn_dado_real_{i}", use_container_width=True):
+                            alternar_salvamento_dado(i, estado_nuvem)
+                            st.rerun()
 
-        if bonus_pendente > 0:
-            st.markdown(f"<p style='color: #fbbf24; font-size:16px; font-style: italic; text-align:center; margin:0;'>🎁 Bônus Extras Acumulados: {total_bonus_salvo} (+{bonus_pendente}) pts</p>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<p style='color: #fbbf24; font-size:16px; font-style: italic; text-align:center; margin:0;'>🎁 Bônus Extras Acumulados: {total_bonus_salvo} pts</p>", unsafe_allow_html=True)
-
-        subtotal = sum(v for v in estado_nuvem["pontuacao"][jogador].values() if v is not None)
-        total_geral = subtotal + total_bonus_salvo + bonus_pendente
-        st.markdown(f"<h2 style='text-align: center; color: #fbbf24; font-family:sans-serif; margin-top:10px;'>TOTAL MESA: {total_geral} PTS</h2>", unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔄 ZERAR PARTIDA ATUAL", use_container_width=True):
-            reiniciar_partida_completa()
+            st.markdown("<br><br>", unsafe_allow_html=True)
             
-        st.markdown("</div>", unsafe_allow_html=True)
+            col_debajo, col_action = st.columns(2)
+            with col_debajo:
+                cor_botao_debajo = "🔥 POR DEBAJO: ON" if estado_nuvem["por_debajo_ativo"] else "💤 POR DEBAJO: OFF"
+                if st.button(cor_botao_debajo, use_container_width=True):
+                    alternar_por_debajo(estado_nuvem)
+                    st.rerun()
+                    
+            with col_action:
+                if st.button("🎲 ROLAR DADOS", type="primary", use_container_width=True):
+                    rolar_dados_web(estado_nuvem)
+                    st.rerun()
+
+        with Placar:
+            st.markdown("<div class='tabela-pontos'>", unsafe_allow_html=True)
+            st.markdown("<h2 class='titulo-dourado'>TABELA DE PONTOS</h2>", unsafe_allow_html=True)
+            
+            slots_nomes = {
+                1: "Jogada de 1", 2: "Jogada de 2", 3: "Jogada de 3",
+                4: "Jogada de 4", 5: "Jogada de 5", 6: "Jogada de 6",
+                "escaleira": "Escaleira (20 pts)", "full_house": "Full House (30 pts)",
+                "quadra": "Quadra (40 pts)", "tuti": "Tuti (50 pts)"
+            }
+            
+            jogador = estado_nuvem["turno_atual"]
+            previa_pontos = calcular_pontos_possiveis(estado_nuvem["dados"], estado_nuvem["jogada_de_primeira"]) if estado_nuvem["dados_rolados_nesta_rodada"] else {}
+            
+            for chave, nome in slots_nomes.items():
+                c_nome, c_btn = st.columns([1.8, 1])
+                with c_nome:
+                    st.markdown(f"<div class='linha-placar'>{nome}</div>", unsafe_allow_html=True)
+                with c_btn:
+                    str_chave = str(chave)
+                    valor_salvo = estado_nuvem["pontuacao"][jogador].get(str_chave)
+                    
+                    if valor_salvo is not None:
+                        st.markdown(f"<div class='caixa-pontos-salva'>{valor_salvo} pts</div>", unsafe_allow_html=True)
+                    else:
+                        if estado_nuvem["dados_rolados_nesta_rodada"]:
+                            pontos_previa = previa_pontos.get(chave, 0)
+                            if st.button(f"Anotar ({pontos_previa})", key=f"slot_{chave}", use_container_width=True):
+                                selecionar_slot_pontuacao(chave, estado_nuvem)
+                                st.rerun()
+                        else:
+                            st.markdown("<div class='caixa-pontos-salva' style='background-color: transparent; border: 1px dashed rgba(255,255,255,0.2); color: rgba(255,255,255,0.4);'>-</div>", unsafe_allow_html=True)
+                st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
+                            
+            st.markdown("<br>", unsafe_allow_html=True)
+            total_bonus_salvo = sum(qtd * 5 for qtd in estado_nuvem["bonus_repeticao"][jogador].values())
+            bonus_pendente = 0
+            if estado_nuvem["dados_rolados_nesta_rodada"]:
+                mesa = verificar_combinacoes_mesa(estado_nuvem["dados"])
+                for b_chave in ["escaleira", "full_house", "quadra", "tuti"]:
+                    if mesa[b_chave] and estado_nuvem["pontuacao"][jogador].get(b_chave) is not None:
+                        bonus_pendente += 5
+
+            if bonus_pendente > 0:
+                st.markdown(f"<p style='color: #fbbf24; font-size:16px; font-style: italic; text-align:center; margin:0;'>🎁 Bônus Extras Acumulados: {total_bonus_salvo} (+{bonus_pendente}) pts</p>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<p style='color: #fbbf24; font-size:16px; font-style: italic; text-align:center; margin:0;'>🎁 Bônus Extras Acumulados: {total_bonus_salvo} pts</p>", unsafe_allow_html=True)
+
+            subtotal = sum(v for v in estado_nuvem["pontuacao"][jogador].values() if v is not None)
+            total_geral = subtotal + total_bonus_salvo + bonus_pendente
+            st.markdown(f"<h2 style='text-align: center; color: #fbbf24; font-family:sans-serif; margin-top:10px;'>TOTAL MESA: {total_geral} PTS</h2>", unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🔄 ZERAR PARTIDA ATUAL", use_container_width=True):
+                reiniciar_partida_completa()
+                
+            st.markdown("</div>", unsafe_allow_html=True)
+
+# Executa o loop sincronizado principal
+renderizar_tabuleiro_sincronizado()
