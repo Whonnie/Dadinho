@@ -36,18 +36,6 @@ st.markdown("""
         box-shadow: inset 0px 2px 5px rgba(0,0,0,0.8);
     }
     
-    .caixa-pontos-salva {
-        background-color: #1e293b !important;
-        color: #f8fafc !important;
-        border: 1px solid #64748b !important;
-        text-align: center;
-        padding: 6px 0;
-        font-weight: bold;
-        font-size: 16px;
-        border-radius: 8px;
-        box-shadow: inset 0px 2px 4px rgba(0,0,0,0.4);
-    }
-    
     .divisor-pontos {
         border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
         margin: 8px 0;
