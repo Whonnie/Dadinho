@@ -16,13 +16,13 @@ st.markdown("""
         background-color: #064e3b !important;
     }
     
-    /* Placar Lateral Robusto */
+    /* Placar Lateral Robusto - REMOVIDO o background escuro que criava a caixa gigante */
     .tabela-pontos {
-        background-color: #022c22 !important;
         border: 3px solid #fbbf24 !important;
         padding: 25px;
         border-radius: 15px;
         box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
+        background-color: rgba(2, 44, 34, 0.8) !important;
     }
     
     /* Retângulo escuro premium unificado no topo do placar para o Total */
@@ -36,7 +36,7 @@ st.markdown("""
         box-shadow: inset 0px 2px 5px rgba(0,0,0,0.8);
     }
     
-    /* Caixa de pontuação salva fixa */
+    /* A CAIXA BONITINHA QUE TINHA SUMIDO - VOLTOU! */
     .caixa-pontos-salva {
         background-color: #1e293b !important;
         color: #f8fafc !important;
@@ -47,6 +47,8 @@ st.markdown("""
         font-size: 16px;
         border-radius: 8px;
         box-shadow: inset 0px 2px 4px rgba(0,0,0,0.4);
+        display: block;
+        width: 100%;
     }
     
     .divisor-pontos {
@@ -242,7 +244,6 @@ def reiniciar_partida_completa():
         "mostrar_tela_transicao": False
     })
     
-    # BLINDAGEM DO RESET: Limpa caches e força a página principal das duas telas a dar F5
     st.session_state.clear()
     st.markdown("<script>parent.window.location.reload();</script>", unsafe_allow_html=True)
     st.stop()
@@ -287,7 +288,6 @@ def selecionar_slot_pontuacao(slot_chave, estado):
         "mostrar_tela_transicao": True
     })
     
-    # Correção do fluxo do turno: avisa o fragmento para reler sem travar o script principal
     st.html("<script>parent.window.location.reload()</script>")
 
 def fechar_tela_transicao():
@@ -501,6 +501,7 @@ def renderizar_tabuleiro_sincronizado():
                     valor_salvo = estado_nuvem["pontuacao"][jogador].get(str_chave)
                     
                     if valor_salvo is not None:
+                        # CAIXA AZUL ESCURA PREMIUM RESTAURADA PARA OS PONTOS SALVOS!
                         st.markdown(f"<div class='caixa-pontos-salva'>{valor_salvo} pts</div>", unsafe_allow_html=True)
                     else:
                         if estado_nuvem["dados_rolados_nesta_rodada"]:
@@ -508,7 +509,7 @@ def renderizar_tabuleiro_sincronizado():
                             if st.button(f"Anotar ({pontos_previa})", key=f"slot_{chave}", use_container_width=True):
                                 selecionar_slot_pontuacao(chave, estado_nuvem)
                         else:
-                            # REMOVIDO O RETÂNGULO ESCURO VAZIO DO ELSE: Exibe apenas o traço centralizado e limpo
+                            # APENAS O TRAÇO LIMPO E CENTRALIZADO QUANDO ESTÁ ZERADO
                             st.markdown("<div style='color: rgba(255,255,255,0.4); text-align: center; font-size: 18px; font-weight: bold; padding: 6px 0;'>-</div>", unsafe_allow_html=True)
                 st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
                             
