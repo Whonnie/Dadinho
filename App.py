@@ -11,10 +11,12 @@ st.set_page_config(page_title="Dadinhos - Clara & Júlia", layout="wide")
 
 st.markdown("""
     <style>
+    /* Força o fundo de toda a aplicação para o verde cassino escuro */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         background-color: #064e3b !important;
     }
     
+    /* Placar Lateral Robusto */
     .tabela-pontos {
         background-color: #022c22 !important;
         border: 3px solid #fbbf24 !important;
@@ -23,13 +25,14 @@ st.markdown("""
         box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
     }
     
+    /* Retângulo escuro premium unificado no topo do placar para o Total */
     .caixa-total-topo {
         background-color: #011612 !important;
         border: 2px solid #fbbf24 !important;
         border-radius: 10px;
-        padding: 12px;
+        padding: 14px;
         text-align: center;
-        margin-bottom: 25px;
+        margin-bottom: 20px;
         box-shadow: inset 0px 2px 5px rgba(0,0,0,0.8);
     }
     
@@ -208,7 +211,6 @@ def rolar_dados_web(estado):
             })
 
 def reiniciar_partida_completa():
-    # Inicialização pura dos dados sem nenhum número exibido
     dados_iniciais = [
         {"valor": None, "salvo": False, "veio_por_debajo": False, "cor": "#F8F23B", "texto": "#000000"},
         {"valor": None, "salvo": False, "veio_por_debajo": False, "cor": "#F8F23B", "texto": "#000000"},
@@ -225,7 +227,7 @@ def reiniciar_partida_completa():
         "Júlia": {"escaleira": 0, "full_house": 0, "quadra": 0, "tuti": 0}
     }
     
-    # DEFINE ALEATORIAMENTE QUEM COMEÇA A PARTIDA
+    # DEFINE ALEATORIAMENTE QUEM COMEÇA
     jogador_inicial = random.choice(["Clara", "Júlia"])
     
     salvar_estado_no_banco({
@@ -263,7 +265,6 @@ def selecionar_slot_pontuacao(slot_chave, estado):
     pontuacao[jogador][str_chave] = pontos_a_guardar
     proximo_jogador = "Júlia" if jogador == "Clara" else "Clara"
 
-    # Reseta os dados limpando os números para a vez do próximo
     dados_limpos = estado["dados"]
     for d in dados_limpos:
         d["valor"] = None
@@ -402,7 +403,7 @@ def renderizar_tabuleiro_sincronizado():
                 salvar_estado_no_banco({"dados": dados_finais_debajo, "por_debajo_ativo": False})
                 st.rerun()
 
-            # Renderização limpa padrão (Dados vazios mostram "-")
+            # Renderização estável (mostra "-" se o valor for None)
             with container_dados.container():
                 cols_dados = st.columns(5)
                 for i in range(5):
@@ -465,7 +466,7 @@ def renderizar_tabuleiro_sincronizado():
                         
             total_geral = subtotal + total_bonus_salvo + bonus_pendente
             
-            # TOTAL INTEGRADO EXCLUSIVAMENTE NO TOPO DA CAIXA ESCURA
+            # TOTAL INTEGRADO EXCLUSIVAMENTE NO RETÂNGULO DO TOPO DO PLACAR
             st.markdown(f"""
                 <div class='caixa-total-topo'>
                     <span style='color: #fbbf24; font-size: 22px; font-weight: bold; font-family: sans-serif;'>
@@ -503,7 +504,6 @@ def renderizar_tabuleiro_sincronizado():
                                 st.rerun()
                         else:
                             st.markdown("<div class='caixa-pontos-salva' style='background-color: transparent; border: 1px dashed rgba(255,255,255,0.2); color: rgba(255,255,255,0.4);'>-</div>", unsafe_allow_html=True)
-                st.markdown("<div class='caixa-total-topo' style='display:none;'></div>", unsafe_allow_html=True) # Segurança anti-leak
                 st.markdown("<div class='divisor-pontos'></div>", unsafe_allow_html=True)
                             
             st.markdown("<br>", unsafe_allow_html=True)
