@@ -11,10 +11,12 @@ st.set_page_config(page_title="Dadinhos - Clara & Júlia", layout="wide")
 
 st.markdown("""
     <style>
+    /* Força o fundo de toda a aplicação para o verde cassino escuro */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         background-color: #064e3b !important;
     }
     
+    /* Placar Lateral Robusto */
     .tabela-pontos {
         background-color: #022c22 !important;
         border: 3px solid #fbbf24 !important;
@@ -23,6 +25,7 @@ st.markdown("""
         box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
     }
     
+    /* Retângulo escuro premium unificado no topo do placar para o Total */
     .caixa-total-topo {
         background-color: #011612 !important;
         border: 2px solid #fbbf24 !important;
@@ -237,7 +240,9 @@ def reiniciar_partida_completa():
         "bonus_repeticao": bonus_vazio,
         "mostrar_tela_transicao": False
     })
-    st.rerun()
+    
+    # INJEÇÃO DA FORÇA DE RESET: Obriga as telas do PC e Tablet a recarregarem limpas
+    st.html("<script>parent.window.location.reload()</script>")
 
 def selecionar_slot_pontuacao(slot_chave, estado):
     previa = calcular_pontos_possiveis(estado["dados"], estado["jogada_de_primeira"])
